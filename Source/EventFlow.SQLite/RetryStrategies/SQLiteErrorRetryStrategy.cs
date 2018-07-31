@@ -1,19 +1,19 @@
 ﻿// The MIT License (MIT)
-// 
+//
 // Copyright (c) 2015-2018 Rasmus Mikkelsen
 // Copyright (c) 2015-2018 eBay Software Foundation
 // https://github.com/eventflow/EventFlow
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy of
 // this software and associated documentation files (the "Software"), to deal in
 // the Software without restriction, including without limitation the rights to
 // use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
 // the Software, and to permit persons to whom the Software is furnished to do so,
 // subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
 // FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
@@ -22,7 +22,11 @@
 // CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 using System;
+#if NET451
 using System.Data.SQLite;
+#else
+using Microsoft.Data.Sqlite;
+#endif
 using EventFlow.Core;
 using EventFlow.SQLite.Connections;
 
@@ -37,7 +41,7 @@ namespace EventFlow.SQLite.RetryStrategies
         {
             _configuration = configuration;
         }
-
+#if NET451
         public Retry ShouldThisBeRetried(Exception exception, TimeSpan totalExecutionTime, int currentRetryCount)
         {
             var sqLiteException = exception as SQLiteException;
@@ -65,5 +69,34 @@ namespace EventFlow.SQLite.RetryStrategies
                     return Retry.No;
             }
         }
+#else
+        public Retry ShouldThisBeRetried(Exception exception, TimeSpan totalExecutionTime, int currentRetryCount)
+        {
+            var sqLiteException = exception as SqliteException;
+            if (sqLiteException == null || currentRetryCount > _configuration.TransientRetryCount)
+            {
+                return Retry.No;
+            }
+
+            switch (sqLiteException.SqliteErrorCode)
+            {
+                // https://www.sqlite.org/rescode.html#locked
+                // The SQLITE_LOCKED result code indicates that a write operation could not continue because of a
+                // conflict within the same database connection or a conflict with a different database connection
+                // that uses a shared cache.
+                case 6:
+
+                // https://www.sqlite.org/rescode.html#busy
+                // The SQLITE_BUSY result code indicates that the database file could not be written (or in some cases
+                // read) because of concurrent activity by some other database connection, usually a database
+                // connection in a separate process.
+                case 5:
+                    return Retry.YesAfter(_configuration.TransientRetryDelay.PickDelay());
+
+                default:
+                    return Retry.No;
+            }
+        }
+#endif
     }
 }

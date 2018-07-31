@@ -1,19 +1,19 @@
 ﻿// The MIT License (MIT)
-// 
+//
 // Copyright (c) 2015-2018 Rasmus Mikkelsen
 // Copyright (c) 2015-2018 eBay Software Foundation
 // https://github.com/eventflow/EventFlow
-// 
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy of
 // this software and associated documentation files (the "Software"), to deal in
 // the Software without restriction, including without limitation the rights to
 // use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
 // the Software, and to permit persons to whom the Software is furnished to do so,
 // subject to the following conditions:
-// 
+//
 // The above copyright notice and this permission notice shall be included in all
 // copies or substantial portions of the Software.
-// 
+//
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
 // FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
@@ -49,11 +49,16 @@ namespace EventFlow.SQLite.Tests.IntegrationTests.EventStores
 
             var resolver = eventFlowOptions
                 .AddMetadataProvider<AddGuidMetadataProvider>()
+#if NET451
                 .ConfigureSQLite(SQLiteConfiguration.New.SetConnectionString($"Data Source={_databasePath};Version=3;"))
+#else
+                .ConfigureSQLite(SQLiteConfiguration.New.SetConnectionString($"Data Source={_databasePath}"))
+#endif
                 .UseSQLiteEventStore()
                 .CreateResolver();
 
             var connection = resolver.Resolve<ISQLiteConnection>();
+#if NET451
             const string sqlCreateTable = @"
                 CREATE TABLE [EventFlow](
                     [GlobalSequenceNumber] [INTEGER] PRIMARY KEY ASC NOT NULL,
@@ -64,6 +69,18 @@ namespace EventFlow.SQLite.Tests.IntegrationTests.EventStores
                     [Metadata] [nvarchar](1024) NOT NULL,
                     [AggregateSequenceNumber] [int] NOT NULL
                 )";
+#else
+            const string sqlCreateTable = @"
+                CREATE TABLE [EventFlow](
+                    [GlobalSequenceNumber] [INTEGER] PRIMARY KEY ASC NOT NULL,
+                    [BatchId] [uniqueidentifier] NOT NULL,
+                    [AggregateId] [nvarchar](255) NOT NULL,
+                    [AggregateName] [nvarchar](255) NOT NULL,
+                    [Data] [nvarchar](1024) NOT NULL,
+                    [Metadata] [nvarchar](1024) NOT NULL,
+                    [AggregateSequenceNumber] [int] NOT NULL
+                )";
+#endif
             const string sqlCreateIndex = @"
                 CREATE UNIQUE INDEX [IX_EventFlow_AggregateId_AggregateSequenceNumber] ON [EventFlow]
                 (
